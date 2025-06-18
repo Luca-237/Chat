@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chat con WebSocket</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <div id="login-container">
+        <h2>Unirse al Chat</h2>
+        <input type="text" id="username-input" placeholder="Tu nombre de usuario...">
+        <input type="text" id="lobby-input" placeholder="Nombre del Lobby/Sala...">
+        <div class="login-buttons">
+            <button id="join-btn">Unirse</button>
+            <button id="rooms-list-btn" class="secondary-btn">Ver Salas</button>
+        </div>
+    </div>
+
+    <div id="rooms-panel" class="hidden">
+        <div class="rooms-header">
+            <h3>Salas Activas</h3>
+            <button id="close-rooms-btn" class="close-btn">&times;</button>
+        </div>
+        <div id="rooms-list"></div>
+    </div>
+
+    <div id="chat-container" class="hidden">
+        <h3 id="lobby-title"></h3>
+        <div id="chat-window">
+            <div id="output"></div>
+            <div id="typing-indicator"></div>
+        </div>
+        <input id="message-input" type="text" placeholder="Escribe un mensaje...">
+        <button id="send-btn">Enviar</button>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
