@@ -1,308 +1,158 @@
-https://drive.google.com/file/d/1P341wyQ6Ryq85KJ0GtsvOY4ZU0RzVALU/view?usp=sharing
-# Steam Games - Instalación y Configuración
+#!/bin/bash
+# Script de configuración automática de IP
+# Guarda como: setup-ip.sh
 
-## Estructura de Directorios
+echo "🚀 Configuración Automática de Steam Games"
+echo "==========================================="
 
-```
-steam-games/
-├── backend/
-│   ├── server.js
-│   ├── package.json
-│   ├── ecosystem.config.js
-│   └── logs/
-└── frontend/
-    ├── src/
-    │   └── App.js
-    ├── package.json
-    └── public/
-```
+# 1. Detectar IP automáticamente
+echo "📍 Detectando configuración de red..."
 
-## Instalación del Backend
+# IP privada (red local)
+PRIVATE_IP=$(hostname -I | awk '{print $1}')
 
-1. **Crear directorio del backend:**
-```bash
-mkdir -p steam-games/backend
-cd steam-games/backend
-```
+# IP pública (internet)
+PUBLIC_IP=$(curl -s ifconfig.me || curl -s ipinfo.io/ip || echo "No disponible")
 
-2. **Crear los archivos:**
-   - Copiar `server.js` y `package.json` del backend
-   - Copiar `ecosystem.config.js`
+echo ""
+echo "🔍 IPs detectadas:"
+echo "   - IP Local (LAN): $PRIVATE_IP"
+echo "   - IP Pública: $PUBLIC_IP"
+echo ""
 
-3. **Instalar dependencias:**
-```bash
-npm install
-```
+# 2. Preguntar cuál usar
+echo "¿Qué configuración quieres?"
+echo "1) Solo red local (acceso desde tu red WiFi/LAN)"
+echo "2) Acceso público (desde internet - requiere configurar router)"
+echo "3) Ambas (recomendado)"
+echo ""
+read -p "Selecciona (1-3): " OPTION
 
-4. **Crear directorio de logs:**
-```bash
-mkdir logs
-```
+case $OPTION in
+    1)
+        MAIN_IP=$PRIVATE_IP
+        echo "✅ Configurando para red local: $PRIVATE_IP"
+        ;;
+    2)
+        MAIN_IP=$PUBLIC_IP
+        echo "✅ Configurando para acceso público: $PUBLIC_IP"
+        ;;
+    3)
+        MAIN_IP=$PRIVATE_IP
+        echo "✅ Configurando para ambas: $PRIVATE_IP y $PUBLIC_IP"
+        ;;
+    *)
+        echo "❌ Opción inválida"
+        exit 1
+        ;;
+esac
 
-5. **Configurar Steam API (Opcional):**
-   - Ve a: https://steamcommunity.com/dev/apikey
-   - Obtén tu Steam API Key
-   - Encuentra tu Steam ID en: https://steamid.io/
-   - Edita `server.js` y actualiza el `steamId` en el array de usuarios
-   - Configura la variable de entorno `STEAM_API_KEY`
+# 3. Actualizar configuración del frontend
+echo ""
+echo "🔧 Actualizando configuración del frontend..."
 
-## Instalación del Frontend
+cd ~/steam-games/frontend/src
 
-1. **Crear la aplicación React:**
-```bash
-cd ../
-npx create-react-app frontend
-cd frontend
-```
+# Crear backup
+cp App.js App.js.backup.$(date +%Y%m%d_%H%M%S)
 
-2. **Instalar dependencias adicionales:**
-```bash
-npm install lucide-react
-```
+# Actualizar la URL de la API
+sed -i "s|const API_URL = 'http://localhost:3001/api';|const API_URL = 'http://$MAIN_IP:3001/api';|g" App.js
 
-3. **Reemplazar App.js:**
-   - Copiar el contenido del archivo `App.js` proporcionado
-   - Reemplazar el archivo `src/App.js` existente
+echo "✅ Frontend actualizado para usar: http://$MAIN_IP:3001/api"
 
-4. **Construir para producción:**
-```bash
-npm run build
-```
+# 4. Actualizar configuración de Nginx
+echo ""
+echo "🔧 Actualizando configuración de Nginx..."
 
-## Configuración de PM2
-
-1. **Instalar PM2 globalmente:**
-```bash
-sudo npm install -g pm2
-```
-
-2. **Configurar PM2 para iniciar con el sistema:**
-```bash
-pm2 startup
-# Ejecutar el comando que te muestre PM2
-```
-
-3. **Iniciar el backend con PM2:**
-```bash
-cd steam-games/backend
-pm2 start ecosystem.config.js
-```
-
-4. **Guardar la configuración de PM2:**
-```bash
-pm2 save
-```
-
-## Configuración de Nginx (Recomendado)
-
-1. **Instalar Nginx:**
-```bash
-sudo apt update
-sudo apt install nginx
-```
-
-2. **Crear configuración del sitio:**
-```bash
-sudo nano /etc/nginx/sites-available/steam-games
-```
-
-3. **Contenido del archivo de configuración:**
-```nginx
+# Crear configuración de nginx
+sudo tee /etc/nginx/sites-available/steam-games > /dev/null <<EOF
 server {
     listen 80;
-    server_name tu-dominio.com; # Cambia por tu dominio o IP
+    server_name $PRIVATE_IP $PUBLIC_IP localhost;
 
     # Frontend
     location / {
-        root /ruta/a/steam-games/frontend/build;
-        try_files $uri $uri/ /index.html;
+        root $HOME/steam-games/frontend/build;
+        try_files \$uri \$uri/ /index.html;
     }
 
     # API Backend
     location /api {
         proxy_pass http://localhost:3001;
         proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Upgrade \$http_upgrade;
         proxy_set_header Connection 'upgrade';
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_cache_bypass $http_upgrade;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_cache_bypass \$http_upgrade;
+        
+        # CORS headers
+        add_header Access-Control-Allow-Origin *;
+        add_header Access-Control-Allow-Methods 'GET, POST, OPTIONS';
+        add_header Access-Control-Allow-Headers 'DNT,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Range,Authorization';
     }
 }
-```
+EOF
 
-4. **Habilitar el sitio:**
-```bash
-sudo ln -s /etc/nginx/sites-available/steam-games /etc/nginx/sites-enabled/
+# Activar configuración
+sudo rm -f /etc/nginx/sites-enabled/default
+sudo ln -sf /etc/nginx/sites-available/steam-games /etc/nginx/sites-enabled/
+
+# Verificar nginx
 sudo nginx -t
-sudo systemctl reload nginx
-```
+if [ $? -eq 0 ]; then
+    sudo systemctl reload nginx
+    echo "✅ Nginx configurado correctamente"
+else
+    echo "❌ Error en configuración de nginx"
+    exit 1
+fi
 
-## Variables de Entorno
+# 5. Actualizar configuración del backend para CORS
+echo ""
+echo "🔧 Actualizando backend para CORS..."
 
-Crea un archivo `.env` en el directorio del backend:
+cd ~/steam-games/backend
 
-```bash
-# Backend/.env
-NODE_ENV=production
-PORT=3001
-JWT_SECRET=tu-secreto-jwt-muy-seguro-aqui
-STEAM_API_KEY=tu-steam-api-key-aqui
-```
+# Actualizar server.js para permitir CORS desde cualquier origen en desarrollo
+sed -i "s|app.use(cors());|app.use(cors({origin: true, credentials: true}));|g" server.js
 
-**Importante:** Cambia el `JWT_SECRET` por algo más seguro en producción.
-
-## Configuración de Steam API
-
-1. **Obtener Steam API Key:**
-   - Ve a: https://steamcommunity.com/dev/apikey
-   - Registra tu dominio/aplicación
-   - Copia la API Key
-
-2. **Encontrar tu Steam ID:**
-   - Ve a: https://steamid.io/
-   - Ingresa tu perfil de Steam
-   - Copia el Steam ID 64 (formato: 76561198000000000)
-
-3. **Actualizar usuarios en server.js:**
-```javascript
-const users = [
-  {
-    id: 1,
-    username: 'tu-usuario',
-    password: 'tu-contraseña',
-    steamId: '76561198XXXXXXXXX' // Tu Steam ID real
-  }
-];
-```
-
-## Comandos Útiles de PM2
-
-```bash
-# Ver estado de los procesos
-pm2 status
-
-# Ver logs en tiempo real
-pm2 logs steam-games-backend
-
-# Reiniciar la aplicación
-pm2 restart steam-games-backend
-
-# Parar la aplicación
-pm2 stop steam-games-backend
-
-# Eliminar de PM2
-pm2 delete steam-games-backend
-
-# Monitor en tiempo real
-pm2 monit
-```
-
-## Firewall (UFW)
-
-```bash
-# Permitir SSH
-sudo ufw allow ssh
-
-# Permitir HTTP y HTTPS
-sudo ufw allow 'Nginx Full'
-
-# Habilitar firewall
-sudo ufw enable
-```
-
-## Testing
-
-1. **Verificar backend:**
-```bash
-curl http://localhost:3001/api/login \
-  -H "Content-Type: application/json" \
-  -d '{"username":"admin","password":"admin123"}'
-```
-
-2. **Verificar frontend:**
-   - Abrir navegador en `http://tu-servidor`
-   - Iniciar sesión con: `admin` / `admin123`
-
-## Solución de Problemas
-
-### Backend no inicia:
-```bash
-pm2 logs steam-games-backend
-```
-
-### Error de permisos:
-```bash
-sudo chown -R $USER:$USER /ruta/a/steam-games
-```
-
-### Error de puerto ocupado:
-```bash
-sudo netstat -tulpn | grep :3001
-sudo kill -9 <PID>
-```
-
-### Nginx no sirve archivos:
-```bash
-sudo nginx -t
-sudo systemctl status nginx
-```
-
-## Usuarios de Prueba
-
-- **Usuario 1:** `admin` / `admin123`
-- **Usuario 2:** `user` / `user123`
-
-## Actualización de la Aplicación
-
-1. **Actualizar código:**
-```bash
-cd steam-games/backend
-git pull # si usas git
-```
-
-2. **Reinstalar dependencias si es necesario:**
-```bash
-npm install
-```
-
-3. **Reiniciar con PM2:**
-```bash
-pm2 restart steam-games-backend
-```
-
-4. **Para el frontend:**
-```bash
-cd ../frontend
+# 6. Reconstruir frontend
+echo ""
+echo "🏗️ Reconstruyendo frontend..."
+cd ~/steam-games/frontend
 npm run build
-```
 
-## Monitoreo
+# 7. Reiniciar servicios
+echo ""
+echo "🔄 Reiniciando servicios..."
+pm2 restart all
 
-PM2 incluye un monitor web básico:
-```bash
-pm2 web
-```
+echo ""
+echo "🎉 ¡Configuración completada!"
+echo ""
+echo "📱 Puedes acceder desde:"
 
-Accede a `http://tu-servidor:9615` para ver estadísticas.
+if [ $OPTION -eq 1 ] || [ $OPTION -eq 3 ]; then
+    echo "   🏠 Red local: http://$PRIVATE_IP"
+fi
 
-## Backup
+if [ $OPTION -eq 2 ] || [ $OPTION -eq 3 ]; then
+    echo "   🌐 Internet: http://$PUBLIC_IP"
+    echo "   ⚠️  Para acceso desde internet, configura tu router:"
+    echo "      - Port forwarding: Puerto 80 → $PRIVATE_IP:80"
+fi
 
-Respalda regularmente:
-- Configuración de PM2: `pm2 dump`
-- Código fuente
-- Configuración de Nginx
-- Variables de entorno
-
-## Consideraciones de Seguridad
-
-1. Cambiar el `JWT_SECRET` por algo más seguro
-2. Usar HTTPS en producción
-3. Implementar rate limiting
-4. Validar y sanitizar inputs
-5. Usar variables de entorno para datos sensibles
-6. Configurar fail2ban para proteger SSH
-
-Esta configuración te dará una aplicación completa corriendo en PM2 con nginx como proxy reverso.
+echo ""
+echo "👤 Usuarios de prueba:"
+echo "   - admin / admin123"
+echo "   - user / user123"
+echo ""
+echo "🔧 Comandos útiles:"
+echo "   pm2 status          # Ver estado"
+echo "   pm2 logs            # Ver logs"
+echo "   sudo nginx -t       # Verificar nginx"
+echo ""
